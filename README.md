@@ -2,7 +2,9 @@
 # Intrusion detection on NSL-KDD
 
 This is my try with [NSL-KDD](http://www.unb.ca/research/iscx/dataset/iscx-NSL-KDD-dataset.html) dataset, which is an improved version of well-known [KDD'99](http://kdd.ics.uci.edu/databases/kddcup99/kddcup99.html) dataset. I've used Python, Scikit-learn and PySpark via [ready-to-run Jupyter applications in Docker](https://github.com/jupyter/docker-stacks).
+
 I've tried a variety of approaches to deal with this dataset. Here are presented some of them.
+
 Note: I've had to build my own all-spark docker image for trying Apache Spark 2.0 at that moment.
 
 ## Contents
@@ -263,7 +265,7 @@ print(time() - t0)
 ```
 
     125973
-    5.929621934890747
+    6.874044179916382
 
 
 
@@ -281,7 +283,7 @@ print(time() - t0)
 ```
 
     22544
-    0.6700646877288818
+    0.778895378112793
 
 
 ## 2. Exploratory Data Analysis
@@ -342,17 +344,17 @@ Here are some descriptive statistics of available features.
 
 ```python
 # 'protocol_type' nominal column
-(train_df.groupby(nominal_cols[0]).count().sort(sql.asc(nominal_cols[0])).show())
+(train_df.crosstab(nominal_cols[0], 'labels2').sort(sql.asc(nominal_cols[0] + '_labels2')).show())
 (train_df.crosstab(nominal_cols[0], 'labels5').sort(sql.asc(nominal_cols[0] + '_labels5')).show())
 ```
 
-    +-------------+------+
-    |protocol_type| count|
-    +-------------+------+
-    |         icmp|  8291|
-    |          tcp|102689|
-    |          udp| 14993|
-    +-------------+------+
+    +---------------------+------+------+
+    |protocol_type_labels2|attack|normal|
+    +---------------------+------+------+
+    |                 icmp|  6982|  1309|
+    |                  tcp| 49089| 53600|
+    |                  udp|  2559| 12434|
+    +---------------------+------+------+
     
     +---------------------+-----+-----+---+---+------+
     |protocol_type_labels5|  DoS|Probe|R2L|U2R|normal|
@@ -1098,7 +1100,7 @@ print(time() - t0)
 ```
 
     125973
-    12.520598411560059
+    13.566007614135742
 
 
 Custom list of test binary cols is used as test dataset could contain additional categories for 'service' and 'flag' features. However, those additional categories aren't used below.
@@ -1125,7 +1127,7 @@ print(time() - t0)
 ```
 
     22544
-    8.70151138305664
+    9.082245588302612
 
 
 ## 5. Feature Selection using Attribute Ratio
@@ -1181,7 +1183,7 @@ ar_dict
 ```
 
     121
-    4.309403419494629
+    4.625692367553711
 
 
 
@@ -1286,8 +1288,8 @@ ar_dict
                  ('service_sql_net', 0.005099137742373178),
                  ('flag_S3', 0.0030241935483870967),
                  ('flag_OTH', 0.0030117890026675844),
-                 ('service_IRC', 0.0027696293759399615),
                  ('service_pop_3', 0.0027696293759399615),
+                 ('service_IRC', 0.0027696293759399615),
                  ('service_ntp_u', 0.0025009304056568663),
                  ('flag_S2', 0.0017702011186481019),
                  ('service_remote_job', 0.0015466575012888812),
@@ -1341,7 +1343,7 @@ print(time() - t0)
 
     125973
     22544
-    2.313681125640869
+    2.4975554943084717
 
 
 VectorAssembler is used for combining a given list of columns into a single vector column. Then VectorIndexer is used for indexing categorical (binary) features. Indexing categorical features allows algorithms to treat them appropriately, improving performance.
@@ -1376,14 +1378,24 @@ print(time() - t0)
 
     125973
     22544
-    1.5278210639953613
+    1.659245252609253
+
+
+
+```python
+# Setting seed for reproducibility
+seed = 4667979835606274383
+print(seed)
+```
+
+    4667979835606274383
 
 
 The train dataset is splitted into 80% train and 20% cross-validation sets.
 
 
 ```python
-split = (scaled_train_df.randomSplit([0.8, 0.2]))
+split = (scaled_train_df.randomSplit([0.8, 0.2], seed=seed))
 
 scaled_train_df = split[0].cache()
 scaled_cv_df = split[1].cache()
@@ -1392,8 +1404,8 @@ print(scaled_train_df.count())
 print(scaled_cv_df.count())
 ```
 
-    100836
-    25137
+    100840
+    25133
 
 
 Additional "result" dataframes are used to collect probabilities and predictions from different approaches.
@@ -1409,7 +1421,7 @@ print(res_cv_df.count())
 print(res_test_df.count())
 ```
 
-    25137
+    25133
     22544
 
 
@@ -1483,7 +1495,7 @@ pca_train_df = pca_pipeline.fit(scaled_train_df).transform(scaled_train_df)
 print(time() - t0)
 ```
 
-    1.583366870880127
+    1.282867193222046
 
 
 
@@ -1499,14 +1511,14 @@ print(time() - t0)
 ```
 
 
-![png](output_61_0.png)
+![png](output_62_0.png)
 
 
 
-![png](output_61_1.png)
+![png](output_62_1.png)
 
 
-    11.42691421508789
+    12.06510329246521
 
 
 ## 8. KMeans clustering with Random Forest Classifiers
@@ -1533,7 +1545,7 @@ t0 = time()
 kmeans_slicer = VectorSlicer(inputCol="indexed_features", outputCol="features", 
                              names=list(set(selectFeaturesByAR(ar_dict, 0.1)).intersection(numeric_cols)))
 
-kmeans = KMeans(k=8, initSteps=25, maxIter=100, featuresCol="features", predictionCol="cluster")
+kmeans = KMeans(k=8, initSteps=25, maxIter=100, featuresCol="features", predictionCol="cluster", seed=seed)
 
 kmeans_pipeline = Pipeline(stages=[kmeans_slicer, kmeans])
 
@@ -1546,7 +1558,7 @@ kmeans_test_df = kmeans_model.transform(scaled_test_df).cache()
 print(time() - t0)
 ```
 
-    11.931437253952026
+    11.780123472213745
 
 
 
@@ -1568,14 +1580,14 @@ kmeans_crosstab.show(n=30)
     +---------------+------+------+-----+
     |cluster_labels2|attack|normal|count|
     +---------------+------+------+-----+
-    |              0|  9103|  2197|11300|
-    |              1|     3|    28|   31|
-    |              2|  4549| 48761|53310|
-    |              3|  1953|  1874| 3827|
-    |              4| 27647|    94|27741|
-    |              5|     3|     0|    3|
-    |              6|   234|   406|  640|
-    |              7|  3486|   498| 3984|
+    |              0|  6659| 46448|53107|
+    |              1|  9125|  2266|11391|
+    |              2|   626|    61|  687|
+    |              3| 27742|   101|27843|
+    |              4|  2670|  5073| 7743|
+    |              5|     1|     0|    1|
+    |              6|     0|    24|   24|
+    |              7|     2|    42|   44|
     +---------------+------+------+-----+
     
 
@@ -1607,20 +1619,19 @@ print(kmeans_cluster_mapping)
 kmeans_cluster_rf
 ```
 
-    7 1
-    {5: 1.0}
+    6 2
+    {5: 1.0, 6: 1.0}
 
 
 
 
 
-    {0: [11300, 0.8055752212389381],
-     1: [31, 0.0967741935483871],
-     2: [53310, 0.08533108234852749],
-     3: [3827, 0.5103214005748629],
-     4: [27741, 0.9966115136440648],
-     6: [640, 0.365625],
-     7: [3984, 0.875]}
+    {0: [53107, 0.1253883668819553],
+     1: [11391, 0.8010710209814766],
+     2: [687, 0.9112081513828238],
+     3: [27843, 0.9963725173293108],
+     4: [7743, 0.3448275862068966],
+     7: [44, 0.045454545454545456]}
 
 
 
@@ -1640,7 +1651,7 @@ def getClusterModels(df, cluster_rf):
 
     for cluster in cluster_rf.keys():
         t1 = time()
-        rf_classifier = RandomForestClassifier(labelCol=labels_col, featuresCol='rf_features', 
+        rf_classifier = RandomForestClassifier(labelCol=labels_col, featuresCol='rf_features', seed=seed,
                                                numTrees=500, maxDepth=20, featureSubsetStrategy="sqrt")
         
         rf_pipeline = Pipeline(stages=[labels2_indexer, rf_slicer, rf_classifier])
@@ -1684,14 +1695,13 @@ kmeans_cluster_models = getClusterModels(kmeans_train_df, kmeans_cluster_rf)
 print(time() - t0)
 ```
 
-    Finished 0 cluster in 17.9312 ms
-    Finished 1 cluster in 1.01067 ms
-    Finished 2 cluster in 172.831 ms
-    Finished 3 cluster in 10.0356 ms
-    Finished 4 cluster in 11.0964 ms
-    Finished 6 cluster in 2.01898 ms
-    Finished 7 cluster in 8.62377 ms
-    223.55068373680115
+    Finished 0 cluster in 197.395 ms
+    Finished 1 cluster in 18.5909 ms
+    Finished 2 cluster in 1.40909 ms
+    Finished 3 cluster in 12.9506 ms
+    Finished 4 cluster in 3.07712 ms
+    Finished 7 cluster in 0.999874 ms
+    234.42527198791504
 
 
 
@@ -1706,8 +1716,8 @@ print(res_cv_df.count())
 print(time() - t0)
 ```
 
-    25137
-    19.099911212921143
+    25133
+    17.96238350868225
 
 
 
@@ -1723,7 +1733,7 @@ print(time() - t0)
 ```
 
     22544
-    18.19183039665222
+    16.670548915863037
 
 
 As CV data is from the same distribution as the train data it isn't needed to adjust threshold.
@@ -1734,22 +1744,22 @@ printReport(res_cv_df, kmeans_prob_col, e=0.5, labels=labels2)
 ```
 
           	normal	attack	
-    normal	 13470	    15	
-    attack	    18	 11634	
+    normal	 13316	    12	
+    attack	    26	 11779	
      
-    Accuracy = 0.998687
-    AUC = 0.998671
+    Accuracy = 0.998488
+    AUC = 0.998449
      
-    False Alarm Rate = 0.00111235
-    Detection Rate = 0.998455
-    F1 score = 0.998584
+    False Alarm Rate = 0.00090036
+    Detection Rate = 0.997798
+    F1 score = 0.99839
      
                  precision    recall  f1-score   support
     
-            0.0       1.00      1.00      1.00     13485
-            1.0       1.00      1.00      1.00     11652
+            0.0       1.00      1.00      1.00     13328
+            1.0       1.00      1.00      1.00     11805
     
-    avg / total       1.00      1.00      1.00     25137
+    avg / total       1.00      1.00      1.00     25133
     
      
 
@@ -1762,20 +1772,20 @@ printReport(res_test_df, kmeans_prob_col, e=0.01, labels=labels2)
 ```
 
           	normal	attack	
-    normal	  8297	  1414	
-    attack	   196	 12637	
+    normal	  8262	  1449	
+    attack	   182	 12651	
      
-    Accuracy = 0.928584
-    AUC = 0.919559
+    Accuracy = 0.927653
+    AUC = 0.918303
      
-    False Alarm Rate = 0.145608
-    Detection Rate = 0.984727
-    F1 score = 0.940113
+    False Alarm Rate = 0.149212
+    Detection Rate = 0.985818
+    F1 score = 0.939442
      
                  precision    recall  f1-score   support
     
             0.0       0.98      0.85      0.91      9711
-            1.0       0.90      0.98      0.94     12833
+            1.0       0.90      0.99      0.94     12833
     
     avg / total       0.93      0.93      0.93     22544
     
@@ -1794,9 +1804,9 @@ print(res_test_df.count())
 print(time() - t0)
 ```
 
-    25137
+    25133
     22544
-    21.05867886543274
+    16.63809633255005
 
 
 ## 9. Gaussian Mixture clustering with Random Forest Classifiers
@@ -1818,7 +1828,8 @@ pred_cols.append(gm_pred_col)
 from pyspark.ml.clustering import GaussianMixture
 
 t0 = time()
-gm = GaussianMixture(k=8, maxIter=150, featuresCol="pca_features",  predictionCol="cluster", probabilityCol="gm_prob")
+gm = GaussianMixture(k=8, maxIter=150, seed=seed, featuresCol="pca_features", 
+                     predictionCol="cluster", probabilityCol="gm_prob")
 
 gm_pipeline = Pipeline(stages=[pca_slicer, pca, gm])
 gm_model = gm_pipeline.fit(scaled_train_df)
@@ -1838,10 +1849,10 @@ print(gm_test_df.count())
 print(time() - t0)
 ```
 
-    100836
-    25137
+    100840
+    25133
     22544
-    12.582652807235718
+    12.079548120498657
 
 
 
@@ -1854,14 +1865,14 @@ gm_crosstab.show(n=30)
     +---------------+------+------+-----+
     |cluster_labels2|attack|normal|count|
     +---------------+------+------+-----+
-    |              0|  3260| 14686|17946|
-    |              1|  3718|  1590| 5308|
-    |              2|  4142|  5532| 9674|
-    |              3|    36|  1643| 1679|
-    |              4|    16| 26211|26227|
-    |              5| 24009|     0|24009|
-    |              6|  4969|  4188| 9157|
-    |              7|  6828|     8| 6836|
+    |              0| 22895|     0|22895|
+    |              1|  7548| 19846|27394|
+    |              2|    30| 26900|26930|
+    |              3|  4024|     0| 4024|
+    |              4|  4154|  2212| 6366|
+    |              5|  1136|  1007| 2143|
+    |              6|  5479|     0| 5479|
+    |              7|  1559|  4050| 5609|
     +---------------+------+------+-----+
     
 
@@ -1876,20 +1887,18 @@ print(gm_cluster_mapping)
 gm_cluster_rf
 ```
 
-    7 1
-    {5: 1.0}
+    5 3
+    {0: 1.0, 3: 1.0, 6: 1.0}
 
 
 
 
 
-    {0: [17946, 0.1816560793491586],
-     1: [5308, 0.7004521477015825],
-     2: [9674, 0.4281579491420302],
-     3: [1679, 0.02144133412745682],
-     4: [26227, 0.0006100583368284592],
-     6: [9157, 0.542644971060391],
-     7: [6836, 0.9988297249853716]}
+    {1: [27394, 0.27553478863984815],
+     2: [26930, 0.0011139992573338284],
+     4: [6366, 0.6525290606346215],
+     5: [2143, 0.5300979934671022],
+     7: [5609, 0.27794615796042077]}
 
 
 
@@ -1901,14 +1910,12 @@ gm_cluster_models = getClusterModels(gm_train_df, gm_cluster_rf)
 print(time() - t0)
 ```
 
-    Finished 0 cluster in 51.7006 ms
-    Finished 1 cluster in 16.4155 ms
-    Finished 2 cluster in 25.102 ms
-    Finished 3 cluster in 1.65934 ms
-    Finished 4 cluster in 5.44009 ms
-    Finished 6 cluster in 33.3149 ms
-    Finished 7 cluster in 2.30592 ms
-    135.94164323806763
+    Finished 1 cluster in 89.9797 ms
+    Finished 2 cluster in 5.05247 ms
+    Finished 4 cluster in 12.6685 ms
+    Finished 5 cluster in 12.9819 ms
+    Finished 7 cluster in 24.1031 ms
+    144.7893054485321
 
 
 
@@ -1923,8 +1930,8 @@ print(res_cv_df.count())
 print(time() - t0)
 ```
 
-    25137
-    27.19718027114868
+    25133
+    22.402843713760376
 
 
 
@@ -1940,7 +1947,7 @@ print(time() - t0)
 ```
 
     22544
-    27.870269775390625
+    23.39514684677124
 
 
 
@@ -1949,22 +1956,22 @@ printReport(res_cv_df, gm_prob_col, e=0.5, labels=labels2)
 ```
 
           	normal	attack	
-    normal	 13471	    14	
-    attack	    17	 11635	
+    normal	 13322	     6	
+    attack	    36	 11769	
      
-    Accuracy = 0.998767
-    AUC = 0.998751
+    Accuracy = 0.998329
+    AUC = 0.99825
      
-    False Alarm Rate = 0.00103819
-    Detection Rate = 0.998541
-    F1 score = 0.99867
+    False Alarm Rate = 0.00045018
+    Detection Rate = 0.99695
+    F1 score = 0.998219
      
                  precision    recall  f1-score   support
     
-            0.0       1.00      1.00      1.00     13485
-            1.0       1.00      1.00      1.00     11652
+            0.0       1.00      1.00      1.00     13328
+            1.0       1.00      1.00      1.00     11805
     
-    avg / total       1.00      1.00      1.00     25137
+    avg / total       1.00      1.00      1.00     25133
     
      
 
@@ -1975,22 +1982,22 @@ printReport(res_test_df, gm_prob_col, e=0.01, labels=labels2)
 ```
 
           	normal	attack	
-    normal	  8237	  1474	
-    attack	   327	 12506	
+    normal	  8340	  1371	
+    attack	   727	 12106	
      
-    Accuracy = 0.920112
-    AUC = 0.911366
+    Accuracy = 0.906938
+    AUC = 0.901085
      
-    False Alarm Rate = 0.151787
-    Detection Rate = 0.974519
-    F1 score = 0.932831
+    False Alarm Rate = 0.14118
+    Detection Rate = 0.943349
+    F1 score = 0.920258
      
                  precision    recall  f1-score   support
     
-            0.0       0.96      0.85      0.90      9711
-            1.0       0.89      0.97      0.93     12833
+            0.0       0.92      0.86      0.89      9711
+            1.0       0.90      0.94      0.92     12833
     
-    avg / total       0.92      0.92      0.92     22544
+    avg / total       0.91      0.91      0.91     22544
     
      
 
@@ -2007,9 +2014,9 @@ print(res_test_df.count())
 print(time() - t0)
 ```
 
-    25137
+    25133
     22544
-    25.25387144088745
+    17.49277424812317
 
 
 ## 10. Supervised approach for dettecting each type of attacks separately
@@ -2040,12 +2047,12 @@ print(dos_train_df.count())
      .show())
 ```
 
-    90659
+    90750
     +-------+-----+
     |labels5|count|
     +-------+-----+
-    | normal|53858|
-    |    DoS|36801|
+    | normal|54015|
+    |    DoS|36735|
     +-------+-----+
     
 
@@ -2075,7 +2082,7 @@ print(time() - t0)
 dos_ar_dict
 ```
 
-    4.53958797454834
+    4.590113162994385
 
 
 
@@ -2097,10 +2104,10 @@ dos_ar_dict
                  ('dst_host_rerror_rate', 1.7204184332241286),
                  ('num_failed_logins', 1.6819862494988345),
                  ('num_root', 1.6819862494988345),
-                 ('num_shells', 1.6819862494988342),
-                 ('urgent', 1.6819862494988342),
-                 ('num_file_creations', 1.6819862494988342),
                  ('num_access_files', 1.6819862494988342),
+                 ('num_shells', 1.6819862494988342),
+                 ('num_file_creations', 1.6819862494988342),
+                 ('urgent', 1.6819862494988342),
                  ('duration', 1.6819438793516928),
                  ('num_compromised', 1.639589690499449),
                  ('dst_bytes', 1.6383223072580753),
@@ -2174,8 +2181,8 @@ dos_ar_dict
                  ('service_nntp', 0.006156070630504316),
                  ('flag_S1', 0.005389507628915231),
                  ('service_sql_net', 0.005099137742373178),
-                 ('service_IRC', 0.0027696293759399615),
                  ('service_pop_3', 0.0027696293759399615),
+                 ('service_IRC', 0.0027696293759399615),
                  ('service_ntp_u', 0.0025009304056568663),
                  ('flag_RSTR', 0.002172716043871006),
                  ('root_shell', 0.0020385084665059667),
@@ -2196,12 +2203,12 @@ dos_ar_dict
                  ('service_tftp_u', 4.455004455004455e-05),
                  ('flag_SH', 2.969958866069705e-05),
                  ('is_host_login', 1.4849573817231445e-05),
-                 ('flag_RSTOS0', 0.0),
-                 ('service_http_2784', 0.0),
                  ('service_aol', 0.0),
-                 ('service_http_8001', 0.0),
+                 ('flag_RSTOS0', 0.0),
                  ('service_pm_dump', 0.0),
-                 ('service_harvest', 0.0)])
+                 ('service_http_8001', 0.0),
+                 ('service_harvest', 0.0),
+                 ('service_http_2784', 0.0)])
 
 
 
@@ -2212,7 +2219,7 @@ dos_slicer = VectorSlicer(inputCol="indexed_features", outputCol="features",
                           names=selectFeaturesByAR(dos_ar_dict, 0.05))
 
 dos_rf = RandomForestClassifier(labelCol=labels_col, featuresCol='features', featureSubsetStrategy='sqrt',
-                                numTrees=500, maxDepth=20)
+                                numTrees=500, maxDepth=20, seed=seed)
 
 dos_rf_pipeline = Pipeline(stages=[dos_slicer, dos_rf])
 dos_rf_model = dos_rf_pipeline.fit(dos_train_df)
@@ -2225,9 +2232,9 @@ print(dos_test_df.count())
 print(time() - t0)
 ```
 
-    25137
+    25133
     22544
-    138.25394558906555
+    154.9416139125824
 
 
 
@@ -2245,8 +2252,8 @@ print(res_cv_df.count())
 print(time() - t0)
 ```
 
-    25137
-    6.670252084732056
+    25133
+    12.384575128555298
 
 
 
@@ -2265,7 +2272,7 @@ print(time() - t0)
 ```
 
     22544
-    5.910689830780029
+    11.694677829742432
 
 
 The first report shows performance of classification for 'normal' and 'DoS' labels, the second report shows performance for the whole data with adjusted threshold.
@@ -2277,41 +2284,41 @@ printReport(res_cv_df, probCol=dos_prob_col, e=0.05)
 ```
 
           	normal	   DoS	
-    normal	 13482	     3	
-       DoS	     0	  9126	
+    normal	 13327	     1	
+       DoS	     3	  9189	
      
-    Accuracy = 0.999867
-    AUC = 0.999889
+    Accuracy = 0.999822
+    AUC = 0.999799
      
-    False Alarm Rate = 0.000222469
-    Detection Rate = 1
-    F1 score = 0.999836
+    False Alarm Rate = 7.503e-05
+    Detection Rate = 0.999674
+    F1 score = 0.999782
      
                  precision    recall  f1-score   support
     
-            0.0       1.00      1.00      1.00     13485
-            1.0       1.00      1.00      1.00      9126
+            0.0       1.00      1.00      1.00     13328
+            1.0       1.00      1.00      1.00      9192
     
-    avg / total       1.00      1.00      1.00     22611
+    avg / total       1.00      1.00      1.00     22520
     
      
           	normal	attack	
-    normal	 13409	    76	
-    attack	   419	 11233	
+    normal	 13248	    80	
+    attack	   427	 11378	
      
-    Accuracy = 0.980308
-    AUC = 0.979202
+    Accuracy = 0.979827
+    AUC = 0.978913
      
-    False Alarm Rate = 0.00563589
-    Detection Rate = 0.964041
-    F1 score = 0.978442
+    False Alarm Rate = 0.0060024
+    Detection Rate = 0.963829
+    F1 score = 0.978206
      
                  precision    recall  f1-score   support
     
-            0.0       0.97      0.99      0.98     13485
-            1.0       0.99      0.96      0.98     11652
+            0.0       0.97      0.99      0.98     13328
+            1.0       0.99      0.96      0.98     11805
     
-    avg / total       0.98      0.98      0.98     25137
+    avg / total       0.98      0.98      0.98     25133
     
      
 
@@ -2323,15 +2330,15 @@ printReport(res_test_df, probCol=dos_prob_col, e=0.01)
 ```
 
           	normal	   DoS	
-    normal	  9632	    79	
-       DoS	  1639	  5819	
+    normal	  9625	    86	
+       DoS	  1656	  5802	
      
-    Accuracy = 0.899936
-    AUC = 0.88605
+    Accuracy = 0.898538
+    AUC = 0.88455
      
-    False Alarm Rate = 0.0081351
-    Detection Rate = 0.780236
-    F1 score = 0.871369
+    False Alarm Rate = 0.00885594
+    Detection Rate = 0.777957
+    F1 score = 0.869474
      
                  precision    recall  f1-score   support
     
@@ -2342,15 +2349,15 @@ printReport(res_test_df, probCol=dos_prob_col, e=0.01)
     
      
           	normal	attack	
-    normal	  8750	   961	
-    attack	  2801	 10032	
+    normal	  8749	   962	
+    attack	  2787	 10046	
      
-    Accuracy = 0.833126
-    AUC = 0.841387
+    Accuracy = 0.833703
+    AUC = 0.841881
      
-    False Alarm Rate = 0.0989599
-    Detection Rate = 0.781735
-    F1 score = 0.842105
+    False Alarm Rate = 0.0990629
+    Detection Rate = 0.782826
+    F1 score = 0.84275
      
                  precision    recall  f1-score   support
     
@@ -2374,9 +2381,9 @@ print(res_test_df.count())
 print(time() - t0)
 ```
 
-    25137
+    25133
     22544
-    6.524021625518799
+    6.487504243850708
 
 
 ### 10.2 Probe and normal
@@ -2403,12 +2410,12 @@ print(probe_train_df.count())
      .show())
 ```
 
-    63193
+    63286
     +-------+-----+
     |labels5|count|
     +-------+-----+
-    | normal|53858|
-    |  Probe| 9335|
+    | normal|54015|
+    |  Probe| 9271|
     +-------+-----+
     
 
@@ -2438,7 +2445,7 @@ print(time() - t0)
 probe_ar_dict
 ```
 
-    2.910673141479492
+    3.4159045219421387
 
 
 
@@ -2465,8 +2472,8 @@ probe_ar_dict
                  ('dst_host_serror_rate', 2.422128377779547),
                  ('srv_diff_host_rate', 1.9745638565439239),
                  ('service_http', 1.2988666621151088),
-                 ('urgent', 1.1730840621890917),
                  ('num_access_files', 1.1730840621890917),
+                 ('urgent', 1.1730840621890917),
                  ('num_shells', 1.1730840621890914),
                  ('num_root', 1.1728674890158846),
                  ('num_compromised', 1.1728436409203076),
@@ -2502,56 +2509,56 @@ probe_ar_dict
                  ('service_auth', 0.003516771722771097),
                  ('flag_OTH', 0.0030117890026675844),
                  ('service_gopher', 0.002839198141615762),
-                 ('service_IRC', 0.0027696293759399615),
                  ('service_pop_3', 0.0027696293759399615),
+                 ('service_IRC', 0.0027696293759399615),
                  ('service_ntp_u', 0.0025009304056568663),
                  ('service_time', 0.0023217817525152634),
-                 ('service_ctf', 0.0021494282520849455),
                  ('service_ssh', 0.0021494282520849455),
+                 ('service_ctf', 0.0021494282520849455),
                  ('root_shell', 0.0020385084665059667),
-                 ('service_domain', 0.001977134015301298),
                  ('service_mtp', 0.001977134015301298),
-                 ('service_whois', 0.001977134015301298),
                  ('service_name', 0.001977134015301298),
+                 ('service_domain', 0.001977134015301298),
+                 ('service_whois', 0.001977134015301298),
                  ('service_link', 0.0018048990116029222),
                  ('flag_S2', 0.0017702011186481019),
-                 ('service_discard', 0.0015466575012888812),
                  ('service_daytime', 0.0015466575012888812),
+                 ('service_discard', 0.0015466575012888812),
                  ('service_remote_job', 0.0015466575012888812),
                  ('service_echo', 0.0015466575012888812),
                  ('service_rje', 0.0015466575012888812),
                  ('service_systat', 0.0014606065813214193),
-                 ('service_supdup', 0.0013745704467353953),
                  ('service_netstat', 0.0013745704467353953),
+                 ('service_supdup', 0.0013745704467353953),
                  ('service_nntp', 0.0012885490937204708),
-                 ('service_netbios_ssn', 0.0011165507171691145),
                  ('service_uucp_path', 0.0011165507171691145),
-                 ('service_hostnames', 0.0011165507171691145),
+                 ('service_netbios_ssn', 0.0011165507171691145),
                  ('service_netbios_dgm', 0.0011165507171691145),
+                 ('service_hostnames', 0.0011165507171691145),
                  ('service_csnet_ns', 0.0010305736860185502),
-                 ('service_iso_tsap', 0.0010305736860185502),
                  ('service_sunrpc', 0.0010305736860185502),
+                 ('service_iso_tsap', 0.0010305736860185502),
                  ('service_sql_net', 0.0010305736860185502),
                  ('service_X11', 0.0009958974968785302),
-                 ('service_vmnet', 0.0009446114212108201),
-                 ('service_imap4', 0.0009446114212108201),
-                 ('service_Z39_50', 0.0009446114212108201),
-                 ('service_bgp', 0.0009446114212108201),
                  ('service_netbios_ns', 0.0009446114212108201),
+                 ('service_Z39_50', 0.0009446114212108201),
+                 ('service_vmnet', 0.0009446114212108201),
                  ('service_uucp', 0.0009446114212108201),
+                 ('service_bgp', 0.0009446114212108201),
+                 ('service_imap4', 0.0009446114212108201),
                  ('service_exec', 0.0007727311754099768),
-                 ('service_nnsp', 0.0006868131868131869),
                  ('service_pop_2', 0.0006868131868131869),
-                 ('service_courier', 0.0006868131868131869),
+                 ('service_nnsp', 0.0006868131868131869),
                  ('service_shell', 0.0006868131868131869),
+                 ('service_courier', 0.0006868131868131869),
                  ('service_klogin', 0.0006868131868131869),
                  ('flag_S3', 0.0006686677167226366),
-                 ('service_login', 0.0006009099493518757),
-                 ('service_kshell', 0.0006009099493518757),
                  ('service_printer', 0.0006009099493518757),
+                 ('service_kshell', 0.0006009099493518757),
+                 ('service_ldap', 0.0006009099493518757),
                  ('service_efs', 0.0006009099493518757),
                  ('service_http_443', 0.0006009099493518757),
-                 ('service_ldap', 0.0006009099493518757),
+                 ('service_login', 0.0006009099493518757),
                  ('service_pm_dump', 0.0004291477126426916),
                  ('su_attempted', 0.00029707529373319667),
                  ('service_aol', 0.00017161489617298782),
@@ -2575,7 +2582,7 @@ probe_slicer = VectorSlicer(inputCol="indexed_features", outputCol="features",
                             names=selectFeaturesByAR(probe_ar_dict, 0.05))
 
 probe_rf = RandomForestClassifier(labelCol=labels_col, featuresCol='features', featureSubsetStrategy='sqrt',
-                                  numTrees=500, maxDepth=20)
+                                  numTrees=500, maxDepth=20, seed=seed)
 probe_rf_pipeline = Pipeline(stages=[probe_slicer, probe_rf])
 
 probe_rf_model = probe_rf_pipeline.fit(probe_train_df)
@@ -2588,9 +2595,9 @@ print(probe_test_df.count())
 print(time() - t0)
 ```
 
-    25137
+    25133
     22544
-    163.4959638118744
+    180.69552969932556
 
 
 
@@ -2607,8 +2614,8 @@ print(res_cv_df.count())
 print(time() - t0)
 ```
 
-    25137
-    7.177661418914795
+    25133
+    6.502754211425781
 
 
 
@@ -2626,7 +2633,7 @@ print(time() - t0)
 ```
 
     22544
-    6.549904823303223
+    6.297783136367798
 
 
 The first report shows performance of classification for 'normal' and 'Probe' labels, the second report shows performance for the whole data with adjusted threshold.
@@ -2638,41 +2645,41 @@ printReport(res_cv_df, probCol=probe_prob_col, e=0.05)
 ```
 
           	normal	 Probe	
-    normal	 13477	     8	
-     Probe	    13	  2308	
+    normal	 13322	     6	
+     Probe	    12	  2373	
      
-    Accuracy = 0.998671
-    AUC = 0.996903
+    Accuracy = 0.998854
+    AUC = 0.997259
      
-    False Alarm Rate = 0.000593252
-    Detection Rate = 0.994399
-    F1 score = 0.995471
+    False Alarm Rate = 0.00045018
+    Detection Rate = 0.994969
+    F1 score = 0.996222
      
                  precision    recall  f1-score   support
     
-            0.0       1.00      1.00      1.00     13485
-            1.0       1.00      0.99      1.00      2321
+            0.0       1.00      1.00      1.00     13328
+            1.0       1.00      0.99      1.00      2385
     
-    avg / total       1.00      1.00      1.00     15806
+    avg / total       1.00      1.00      1.00     15713
     
      
           	normal	attack	
-    normal	 13283	   202	
-    attack	   411	 11241	
+    normal	 13127	   201	
+    attack	   430	 11375	
      
-    Accuracy = 0.975614
-    AUC = 0.974874
+    Accuracy = 0.974894
+    AUC = 0.974247
      
-    False Alarm Rate = 0.0149796
-    Detection Rate = 0.964727
-    F1 score = 0.973457
+    False Alarm Rate = 0.015081
+    Detection Rate = 0.963575
+    F1 score = 0.973012
      
                  precision    recall  f1-score   support
     
-            0.0       0.97      0.99      0.98     13485
-            1.0       0.98      0.96      0.97     11652
+            0.0       0.97      0.98      0.98     13328
+            1.0       0.98      0.96      0.97     11805
     
-    avg / total       0.98      0.98      0.98     25137
+    avg / total       0.98      0.97      0.97     25133
     
      
 
@@ -2684,39 +2691,39 @@ printReport(res_test_df, probCol=probe_prob_col, e=0.01)
 ```
 
           	normal	 Probe	
-    normal	  9494	   217	
-     Probe	   955	  1466	
+    normal	  9493	   218	
+     Probe	   946	  1475	
      
-    Accuracy = 0.903396
-    AUC = 0.791595
+    Accuracy = 0.904055
+    AUC = 0.793402
      
-    False Alarm Rate = 0.0223458
-    Detection Rate = 0.605535
-    F1 score = 0.714425
+    False Alarm Rate = 0.0224488
+    Detection Rate = 0.609252
+    F1 score = 0.717064
      
                  precision    recall  f1-score   support
     
             0.0       0.91      0.98      0.94      9711
-            1.0       0.87      0.61      0.71      2421
+            1.0       0.87      0.61      0.72      2421
     
     avg / total       0.90      0.90      0.90     12132
     
      
           	normal	attack	
-    normal	  8408	  1303	
-    attack	  1826	 11007	
+    normal	  8416	  1295	
+    attack	  1969	 10864	
      
-    Accuracy = 0.861205
-    AUC = 0.861766
+    Accuracy = 0.855216
+    AUC = 0.856607
      
-    False Alarm Rate = 0.134178
-    Detection Rate = 0.857711
-    F1 score = 0.875552
+    False Alarm Rate = 0.133354
+    Detection Rate = 0.846567
+    F1 score = 0.869398
      
                  precision    recall  f1-score   support
     
-            0.0       0.82      0.87      0.84      9711
-            1.0       0.89      0.86      0.88     12833
+            0.0       0.81      0.87      0.84      9711
+            1.0       0.89      0.85      0.87     12833
     
     avg / total       0.86      0.86      0.86     22544
     
@@ -2735,9 +2742,9 @@ print(res_test_df.count())
 print(time() - t0)
 ```
 
-    25137
+    25133
     22544
-    7.032124280929565
+    7.390507459640503
 
 
 ### 10.3 R2L, U2R and normal types
@@ -2766,13 +2773,13 @@ print(r2l_u2r_train_df.count())
      .show())
 ```
 
-    54700
+    54834
     +-------+-----+
     |labels5|count|
     +-------+-----+
-    | normal|53858|
-    |    R2L|  797|
-    |    U2R|   45|
+    | normal|54015|
+    |    R2L|  782|
+    |    U2R|   37|
     +-------+-----+
     
 
@@ -2788,7 +2795,7 @@ print(time() - t0)
 r2l_u2r_ar_dict
 ```
 
-    3.069613456726074
+    3.622958183288574
 
 
 
@@ -2852,8 +2859,8 @@ r2l_u2r_ar_dict
                  ('service_auth', 0.003516771722771097),
                  ('flag_S3', 0.0030241935483870967),
                  ('service_ecr_i', 0.002829359820112281),
-                 ('service_IRC', 0.0027696293759399615),
                  ('service_pop_3', 0.0027696293759399615),
+                 ('service_IRC', 0.0027696293759399615),
                  ('service_ntp_u', 0.0025009304056568663),
                  ('service_login', 0.002014098690835851),
                  ('flag_S2', 0.0017702011186481019),
@@ -2865,56 +2872,56 @@ r2l_u2r_ar_dict
                  ('service_urh_i', 0.0001485155867108253),
                  ('service_red_i', 0.00011880894037276305),
                  ('land', 0.00010395627895924914),
-                 ('service_ssh', 7.425227954498203e-05),
                  ('service_tim_i', 7.425227954498203e-05),
+                 ('service_ssh', 7.425227954498203e-05),
                  ('service_shell', 5.940094150492285e-05),
                  ('service_tftp_u', 4.455004455004455e-05),
                  ('is_host_login', 1.4849573817231445e-05),
-                 ('service_discard', 0.0),
-                 ('service_gopher', 0.0),
-                 ('service_mtp', 0.0),
-                 ('service_daytime', 0.0),
-                 ('service_whois', 0.0),
-                 ('service_nnsp', 0.0),
-                 ('flag_RSTOS0', 0.0),
-                 ('service_vmnet', 0.0),
-                 ('service_http_2784', 0.0),
-                 ('service_kshell', 0.0),
-                 ('service_netbios_ssn', 0.0),
-                 ('service_printer', 0.0),
-                 ('service_systat', 0.0),
-                 ('service_name', 0.0),
-                 ('service_pop_2', 0.0),
-                 ('service_supdup', 0.0),
-                 ('service_uucp_path', 0.0),
-                 ('service_ctf', 0.0),
-                 ('service_netstat', 0.0),
-                 ('service_csnet_ns', 0.0),
-                 ('service_Z39_50', 0.0),
-                 ('service_link', 0.0),
-                 ('service_hostnames', 0.0),
-                 ('service_aol', 0.0),
-                 ('service_bgp', 0.0),
-                 ('service_iso_tsap', 0.0),
                  ('service_netbios_ns', 0.0),
+                 ('service_Z39_50', 0.0),
+                 ('service_printer', 0.0),
+                 ('service_mtp', 0.0),
+                 ('service_csnet_ns', 0.0),
+                 ('service_uucp_path', 0.0),
+                 ('service_pop_2', 0.0),
+                 ('service_daytime', 0.0),
+                 ('service_discard', 0.0),
                  ('service_sunrpc', 0.0),
-                 ('service_http_8001', 0.0),
                  ('service_remote_job', 0.0),
-                 ('service_courier', 0.0),
-                 ('service_exec', 0.0),
-                 ('service_nntp', 0.0),
+                 ('service_aol', 0.0),
+                 ('service_vmnet', 0.0),
+                 ('service_kshell', 0.0),
+                 ('service_iso_tsap', 0.0),
+                 ('service_gopher', 0.0),
+                 ('service_systat', 0.0),
+                 ('service_ldap', 0.0),
+                 ('service_nnsp', 0.0),
+                 ('service_uucp', 0.0),
+                 ('flag_RSTOS0', 0.0),
+                 ('service_netbios_ssn', 0.0),
+                 ('service_bgp', 0.0),
                  ('service_netbios_dgm', 0.0),
+                 ('service_sql_net', 0.0),
+                 ('service_echo', 0.0),
+                 ('wrong_fragment', 0.0),
+                 ('service_link', 0.0),
                  ('service_efs', 0.0),
                  ('service_http_443', 0.0),
-                 ('service_echo', 0.0),
-                 ('service_pm_dump', 0.0),
-                 ('service_klogin', 0.0),
                  ('service_rje', 0.0),
-                 ('wrong_fragment', 0.0),
-                 ('service_ldap', 0.0),
-                 ('service_uucp', 0.0),
+                 ('service_courier', 0.0),
+                 ('service_name', 0.0),
+                 ('service_pm_dump', 0.0),
+                 ('service_netstat', 0.0),
+                 ('service_http_8001', 0.0),
                  ('service_harvest', 0.0),
-                 ('service_sql_net', 0.0)])
+                 ('service_ctf', 0.0),
+                 ('service_hostnames', 0.0),
+                 ('service_klogin', 0.0),
+                 ('service_nntp', 0.0),
+                 ('service_whois', 0.0),
+                 ('service_exec', 0.0),
+                 ('service_supdup', 0.0),
+                 ('service_http_2784', 0.0)])
 
 
 
@@ -2925,7 +2932,7 @@ r2l_u2r_slicer = VectorSlicer(inputCol="indexed_features", outputCol="features",
                               names=selectFeaturesByAR(r2l_u2r_ar_dict, 0.05))
 
 r2l_u2r_rf = RandomForestClassifier(labelCol=labels_col, featuresCol='features', featureSubsetStrategy='sqrt',
-                                    numTrees=500, maxDepth=20)
+                                    numTrees=500, maxDepth=20, seed=seed)
 r2l_u2r_rf_pipeline = Pipeline(stages=[r2l_u2r_slicer, r2l_u2r_rf])
 
 r2l_u2r_rf_model = r2l_u2r_rf_pipeline.fit(r2l_u2r_train_df)
@@ -2938,9 +2945,9 @@ print(r2l_u2r_test_df.count())
 print(time() - t0)
 ```
 
-    25137
+    25133
     22544
-    145.62667083740234
+    142.93370270729065
 
 
 
@@ -2957,8 +2964,8 @@ print(res_cv_df.count())
 print(time() - t0)
 ```
 
-    25137
-    7.572642087936401
+    25133
+    6.968761205673218
 
 
 
@@ -2976,7 +2983,7 @@ print(time() - t0)
 ```
 
     22544
-    6.949880838394165
+    6.208894729614258
 
 
 The first report shows performance of classification for 'normal' and 'R2L&U2R' labels, the second report shows performance for the whole data with adjusted threshold.
@@ -2988,41 +2995,41 @@ printReport(res_cv_df, probCol=r2l_u2r_prob_col, e=0.05, labels=labels2)
 ```
 
            	 normal	R2L&U2R	
-     normal	  13483	      2	
-    R2L&U2R	      3	    202	
+     normal	  13324	      4	
+    R2L&U2R	     14	    214	
      
-    Accuracy = 0.999635
-    AUC = 0.992609
+    Accuracy = 0.998672
+    AUC = 0.969148
      
-    False Alarm Rate = 0.000148313
-    Detection Rate = 0.985366
-    F1 score = 0.987775
+    False Alarm Rate = 0.00030012
+    Detection Rate = 0.938596
+    F1 score = 0.959641
      
                  precision    recall  f1-score   support
     
-            0.0       1.00      1.00      1.00     13485
-            1.0       0.99      0.99      0.99       205
+            0.0       1.00      1.00      1.00     13328
+            1.0       0.98      0.94      0.96       228
     
-    avg / total       1.00      1.00      1.00     13690
+    avg / total       1.00      1.00      1.00     13556
     
      
           	normal	attack	
-    normal	 13412	    73	
-    attack	  4284	  7368	
+    normal	 13245	    83	
+    attack	  4361	  7444	
      
-    Accuracy = 0.82667
-    AUC = 0.813462
+    Accuracy = 0.823181
+    AUC = 0.812176
      
-    False Alarm Rate = 0.00541342
-    Detection Rate = 0.632338
-    F1 score = 0.771801
+    False Alarm Rate = 0.00622749
+    Detection Rate = 0.63058
+    F1 score = 0.770122
      
                  precision    recall  f1-score   support
     
-            0.0       0.76      0.99      0.86     13485
-            1.0       0.99      0.63      0.77     11652
+            0.0       0.75      0.99      0.86     13328
+            1.0       0.99      0.63      0.77     11805
     
-    avg / total       0.87      0.83      0.82     25137
+    avg / total       0.86      0.82      0.82     25133
     
      
 
@@ -3034,41 +3041,41 @@ printReport(res_test_df, probCol=r2l_u2r_prob_col, e=0.01, labels=labels2)
 ```
 
            	 normal	R2L&U2R	
-     normal	   9711	      0	
-    R2L&U2R	   2626	    328	
+     normal	   9709	      2	
+    R2L&U2R	   2727	    227	
      
-    Accuracy = 0.792657
-    AUC = 0.555518
+    Accuracy = 0.784524
+    AUC = 0.53832
      
-    False Alarm Rate = 0
-    Detection Rate = 0.111036
-    F1 score = 0.199878
+    False Alarm Rate = 0.000205952
+    Detection Rate = 0.076845
+    F1 score = 0.142633
      
                  precision    recall  f1-score   support
     
-            0.0       0.79      1.00      0.88      9711
-            1.0       1.00      0.11      0.20      2954
+            0.0       0.78      1.00      0.88      9711
+            1.0       0.99      0.08      0.14      2954
     
-    avg / total       0.84      0.79      0.72     12665
+    avg / total       0.83      0.78      0.71     12665
     
      
           	normal	attack	
-    normal	  9315	   396	
-    attack	  5936	  6897	
+    normal	  9403	   308	
+    attack	  5858	  6975	
      
-    Accuracy = 0.719127
-    AUC = 0.748332
+    Accuracy = 0.72649
+    AUC = 0.755902
      
-    False Alarm Rate = 0.0407785
-    Detection Rate = 0.537443
-    F1 score = 0.685382
+    False Alarm Rate = 0.0317166
+    Detection Rate = 0.543521
+    F1 score = 0.693478
      
                  precision    recall  f1-score   support
     
-            0.0       0.61      0.96      0.75      9711
-            1.0       0.95      0.54      0.69     12833
+            0.0       0.62      0.97      0.75      9711
+            1.0       0.96      0.54      0.69     12833
     
-    avg / total       0.80      0.72      0.71     22544
+    avg / total       0.81      0.73      0.72     22544
     
      
 
@@ -3085,9 +3092,9 @@ print(res_test_df.count())
 print(time() - t0)
 ```
 
-    25137
+    25133
     22544
-    6.866191148757935
+    6.978176593780518
 
 
 ### 10.4 Combining results
@@ -3110,22 +3117,22 @@ printReport(res_cv_df, sup_prob_col, e=0.05, labels=labels2)
 ```
 
           	normal	attack	
-    normal	 13339	   146	
-    attack	     0	 11652	
+    normal	 13195	   133	
+    attack	     2	 11803	
      
-    Accuracy = 0.994192
-    AUC = 0.994587
+    Accuracy = 0.994629
+    AUC = 0.994926
      
-    False Alarm Rate = 0.0108268
-    Detection Rate = 1
-    F1 score = 0.993774
+    False Alarm Rate = 0.00997899
+    Detection Rate = 0.999831
+    F1 score = 0.994314
      
                  precision    recall  f1-score   support
     
-            0.0       1.00      0.99      0.99     13485
-            1.0       0.99      1.00      0.99     11652
+            0.0       1.00      0.99      0.99     13328
+            1.0       0.99      1.00      0.99     11805
     
-    avg / total       0.99      0.99      0.99     25137
+    avg / total       0.99      0.99      0.99     25133
     
      
 
@@ -3140,22 +3147,22 @@ printReport(res_cv_df, sup_pred_col, labels=labels2)
 ```
 
           	normal	attack	
-    normal	 13183	   302	
-    attack	     0	 11652	
+    normal	 13011	   317	
+    attack	     0	 11805	
      
-    Accuracy = 0.987986
-    AUC = 0.988802
+    Accuracy = 0.987387
+    AUC = 0.988108
      
-    False Alarm Rate = 0.0223953
+    False Alarm Rate = 0.0237845
     Detection Rate = 1
-    F1 score = 0.987207
+    F1 score = 0.986751
      
                  precision    recall  f1-score   support
     
-            0.0       1.00      0.98      0.99     13485
-            1.0       0.97      1.00      0.99     11652
+            0.0       1.00      0.98      0.99     13328
+            1.0       0.97      1.00      0.99     11805
     
-    avg / total       0.99      0.99      0.99     25137
+    avg / total       0.99      0.99      0.99     25133
     
      
 
@@ -3169,22 +3176,22 @@ printReport(res_test_df, sup_prob_col, e=0.005, labels=labels2)
 ```
 
           	normal	attack	
-    normal	  8326	  1385	
-    attack	   672	 12161	
+    normal	  8367	  1344	
+    attack	   830	 12003	
      
-    Accuracy = 0.908756
-    AUC = 0.902507
+    Accuracy = 0.903566
+    AUC = 0.898462
      
-    False Alarm Rate = 0.142622
-    Detection Rate = 0.947635
-    F1 score = 0.922021
+    False Alarm Rate = 0.1384
+    Detection Rate = 0.935323
+    F1 score = 0.91696
      
                  precision    recall  f1-score   support
     
-            0.0       0.93      0.86      0.89      9711
-            1.0       0.90      0.95      0.92     12833
+            0.0       0.91      0.86      0.89      9711
+            1.0       0.90      0.94      0.92     12833
     
-    avg / total       0.91      0.91      0.91     22544
+    avg / total       0.90      0.90      0.90     22544
     
      
 
@@ -3199,22 +3206,22 @@ printReport(res_test_df, sup_pred_col, labels=labels2)
 ```
 
           	normal	attack	
-    normal	  8292	  1419	
-    attack	   626	 12207	
+    normal	  8302	  1409	
+    attack	   728	 12105	
      
-    Accuracy = 0.909289
-    AUC = 0.902548
+    Accuracy = 0.905208
+    AUC = 0.899089
      
-    False Alarm Rate = 0.146123
-    Detection Rate = 0.95122
-    F1 score = 0.922711
+    False Alarm Rate = 0.145093
+    Detection Rate = 0.943271
+    F1 score = 0.91889
      
                  precision    recall  f1-score   support
     
-            0.0       0.93      0.85      0.89      9711
-            1.0       0.90      0.95      0.92     12833
+            0.0       0.92      0.85      0.89      9711
+            1.0       0.90      0.94      0.92     12833
     
-    avg / total       0.91      0.91      0.91     22544
+    avg / total       0.91      0.91      0.90     22544
     
      
 
@@ -3223,8 +3230,38 @@ printReport(res_test_df, sup_pred_col, labels=labels2)
 
 Here are some experiments with ensembling and stacking results from different approaches.
 
+### 11.1 Linear combination of all models
+
 
 ```python
+# Printing report of the best single model for comparison
+printReport(res_test_df, kmeans_pred_col)
+```
+
+          	normal	attack	
+    normal	  8262	  1449	
+    attack	   182	 12651	
+     
+    Accuracy = 0.927653
+    AUC = 0.918303
+     
+    False Alarm Rate = 0.149212
+    Detection Rate = 0.985818
+    F1 score = 0.939442
+     
+                 precision    recall  f1-score   support
+    
+            0.0       0.98      0.85      0.91      9711
+            1.0       0.90      0.99      0.94     12833
+    
+    avg / total       0.93      0.93      0.93     22544
+    
+     
+
+
+
+```python
+# Linear combination of all models 
 printReport(res_test_df
             .select('labels2_index', ((3 * col(kmeans_prob_col) \
                                         + col(gm_prob_col) \
@@ -3236,20 +3273,20 @@ printReport(res_test_df
 ```
 
           	normal	attack	
-    normal	  8144	  1567	
-    attack	    64	 12769	
+    normal	  8163	  1548	
+    attack	    94	 12739	
      
-    Accuracy = 0.927653
-    AUC = 0.916825
+    Accuracy = 0.927165
+    AUC = 0.916634
      
-    False Alarm Rate = 0.161363
-    Detection Rate = 0.995013
-    F1 score = 0.939968
+    False Alarm Rate = 0.159407
+    Detection Rate = 0.992675
+    F1 score = 0.939454
      
                  precision    recall  f1-score   support
     
             0.0       0.99      0.84      0.91      9711
-            1.0       0.89      1.00      0.94     12833
+            1.0       0.89      0.99      0.94     12833
     
     avg / total       0.93      0.93      0.93     22544
     
@@ -3263,249 +3300,24 @@ printReport(res_test_df
                                         + col(gm_prob_col) \
                                         + col(sup_prob_col))/4)
                     .alias('voting')), 
-            'voting', e=0.01, labels=labels2)
+            'voting', e=0.005, labels=labels2)
 ```
 
           	normal	attack	
-    normal	  8136	  1575	
-    attack	    51	 12782	
+    normal	  8120	  1591	
+    attack	    83	 12750	
      
-    Accuracy = 0.927874
-    AUC = 0.916919
+    Accuracy = 0.925745
+    AUC = 0.914849
      
-    False Alarm Rate = 0.162187
-    Detection Rate = 0.996026
-    F1 score = 0.940199
+    False Alarm Rate = 0.163835
+    Detection Rate = 0.993532
+    F1 score = 0.938397
      
                  precision    recall  f1-score   support
     
             0.0       0.99      0.84      0.91      9711
-            1.0       0.89      1.00      0.94     12833
-    
-    avg / total       0.93      0.93      0.93     22544
-    
-     
-
-
-
-```python
-from pyspark.ml.classification import LogisticRegression
-
-t0 = time()
-lr_assembler = VectorAssembler(inputCols=[
-                            kmeans_prob_col, 
-                            gm_prob_col, 
-                            dos_prob_col, 
-                            probe_prob_col, 
-                            r2l_u2r_prob_col
-                            ], 
-                            outputCol="features")
-
-lr = LogisticRegression(maxIter=100, labelCol="labels2_index", standardization=False,
-                        weightCol='weights')
-lr_pipeline = Pipeline(stages=[lr_assembler, lr])
-
-weights_dict = {
-    'normal': 1.0,
-    'DoS': 8.0,
-    'Probe': 24.0,
-    'R2L': 300.0,
-    'U2R': 1200.0
-}
-
-udf_weight = udf(lambda row: weights_dict[row], DoubleType())
-lr_model = lr_pipeline.fit(res_cv_df.withColumn('weights', udf_weight('labels5')))
-lr_test_df = lr_model.transform(res_test_df).cache()
-
-res_test_df = (res_test_df.drop('lr_prob')
-                    .join(lr_test_df.rdd
-                    .map(lambda row: (row['id'], float(row['probability'][1])))
-                    .toDF(['id', 'lr_prob']), 'id')
-                    .cache())
-
-print(res_test_df.count())
-print(time() - t0)
-```
-
-    22544
-    50.04886722564697
-
-
-
-```python
-printReport(res_test_df, 'lr_prob', e=0.01, labels=labels2)
-```
-
-          	normal	attack	
-    normal	  8755	   956	
-    attack	  1464	 11369	
-     
-    Accuracy = 0.892654
-    AUC = 0.893737
-     
-    False Alarm Rate = 0.0984451
-    Detection Rate = 0.885919
-    F1 score = 0.903808
-     
-                 precision    recall  f1-score   support
-    
-            0.0       0.86      0.90      0.88      9711
-            1.0       0.92      0.89      0.90     12833
-    
-    avg / total       0.89      0.89      0.89     22544
-    
-     
-
-
-
-```python
-t0 = time()
-rf_assembler = VectorAssembler(inputCols=[
-                            kmeans_pred_col, 
-                            gm_pred_col, 
-                            dos_pred_col, 
-                            probe_pred_col, 
-                            r2l_u2r_pred_col,
-                            ],
-                            outputCol='features')
-
-rf_indexer =  VectorIndexer(inputCol='features', outputCol='indexed_features', maxCategories=2)
-
-rf = RandomForestClassifier(labelCol='labels2_index', featuresCol='features',
-                           numTrees=300, maxDepth=5, featureSubsetStrategy='sqrt')
-rf_pipeline = Pipeline(stages=[rf_assembler, 
-                               rf_indexer,
-                               rf])
-rf_model = rf_pipeline.fit(res_cv_df)
-rf_test_df = rf_model.transform(res_test_df).cache()
-
-res_test_df = (res_test_df.drop('rf_prob')
-                    .join(rf_test_df.rdd
-                    .map(lambda row: (row['id'], float(row['probability'][1])))
-                    .toDF(['id', 'rf_prob']), 'id')
-                    .cache())
-
-print(res_test_df.count())
-print(time() - t0)
-```
-
-    22544
-    29.51965069770813
-
-
-
-```python
-printReport(res_test_df, 'rf_prob', e=0.01, labels=labels2)
-```
-
-          	normal	attack	
-    normal	  8096	  1615	
-    attack	    54	 12779	
-     
-    Accuracy = 0.925967
-    AUC = 0.914743
-     
-    False Alarm Rate = 0.166306
-    Detection Rate = 0.995792
-    F1 score = 0.938701
-     
-                 precision    recall  f1-score   support
-    
-            0.0       0.99      0.83      0.91      9711
-            1.0       0.89      1.00      0.94     12833
-    
-    avg / total       0.93      0.93      0.92     22544
-    
-     
-
-
-
-```python
-printReport(res_test_df
-            .select('labels2_index', ((col('lr_prob') + col('rf_prob'))/2)
-                    .alias('voting')), 
-                    'voting', e=0.01, labels=labels2)
-```
-
-          	normal	attack	
-    normal	  8117	  1594	
-    attack	    55	 12778	
-     
-    Accuracy = 0.926854
-    AUC = 0.915785
-     
-    False Alarm Rate = 0.164144
-    Detection Rate = 0.995714
-    F1 score = 0.939386
-     
-                 precision    recall  f1-score   support
-    
-            0.0       0.99      0.84      0.91      9711
-            1.0       0.89      1.00      0.94     12833
-    
-    avg / total       0.93      0.93      0.93     22544
-    
-     
-
-
-
-```python
-printReport(res_test_df
-            .select('labels2_index', (((col('lr_prob') + col('rf_prob'))/2) + ((3 * col(kmeans_prob_col) \
-                                        + col(gm_prob_col) \
-                                        + col(dos_prob_col) \
-                                        + col(probe_prob_col) \
-                                        + col(r2l_u2r_prob_col))/7)/2)
-                    .alias('voting')), 
-                    'voting', e=0.01, labels=labels2)
-```
-
-          	normal	attack	
-    normal	  8096	  1615	
-    attack	    54	 12779	
-     
-    Accuracy = 0.925967
-    AUC = 0.914743
-     
-    False Alarm Rate = 0.166306
-    Detection Rate = 0.995792
-    F1 score = 0.938701
-     
-                 precision    recall  f1-score   support
-    
-            0.0       0.99      0.83      0.91      9711
-            1.0       0.89      1.00      0.94     12833
-    
-    avg / total       0.93      0.93      0.92     22544
-    
-     
-
-
-
-```python
-printReport(res_test_df
-            .select('labels2_index', (((col('lr_prob') + col('rf_prob'))/2) + ((3 * col(kmeans_prob_col) \
-                                        + col(gm_prob_col) \
-                                        + col(sup_prob_col))/3)/2)
-                    .alias('voting')), 
-                    'voting', e=0.01, labels=labels2)
-```
-
-          	normal	attack	
-    normal	  8096	  1615	
-    attack	    54	 12779	
-     
-    Accuracy = 0.925967
-    AUC = 0.914743
-     
-    False Alarm Rate = 0.166306
-    Detection Rate = 0.995792
-    F1 score = 0.938701
-     
-                 precision    recall  f1-score   support
-    
-            0.0       0.99      0.83      0.91      9711
-            1.0       0.89      1.00      0.94     12833
+            1.0       0.89      0.99      0.94     12833
     
     avg / total       0.93      0.93      0.92     22544
     
@@ -3523,25 +3335,233 @@ printReport(res_test_df
 ```
 
           	normal	attack	
-    normal	  8096	  1615	
-    attack	    54	 12779	
+    normal	  8141	  1570	
+    attack	    88	 12745	
      
-    Accuracy = 0.925967
-    AUC = 0.914743
+    Accuracy = 0.926455
+    AUC = 0.915735
      
-    False Alarm Rate = 0.166306
-    Detection Rate = 0.995792
-    F1 score = 0.938701
+    False Alarm Rate = 0.161672
+    Detection Rate = 0.993143
+    F1 score = 0.938927
+     
+                 precision    recall  f1-score   support
+    
+            0.0       0.99      0.84      0.91      9711
+            1.0       0.89      0.99      0.94     12833
+    
+    avg / total       0.93      0.93      0.93     22544
+    
+     
+
+
+### 11.2 Logistic Regression and Random Forest Classifier 
+
+
+```python
+from pyspark.ml.classification import LogisticRegression
+
+t0 = time()
+lr_assembler = VectorAssembler(inputCols=[
+                            kmeans_prob_col, 
+                            gm_prob_col, 
+                            dos_prob_col, 
+                            probe_prob_col, 
+                            r2l_u2r_prob_col
+                            ], 
+                            outputCol="features")
+
+lr = LogisticRegression(maxIter=100, labelCol="labels2_index", standardization=False, weightCol='weights')
+lr_pipeline = Pipeline(stages=[lr_assembler, lr])
+
+weights_dict = {
+    'normal': 1.0,
+    'DoS': 100.0,
+    'Probe': 100.0,
+    'R2L': 100.0,
+    'U2R': 100.0
+}
+
+udf_weight = udf(lambda row: weights_dict[row], DoubleType())
+lr_model = lr_pipeline.fit(res_cv_df.withColumn('weights', udf_weight('labels5')))
+lr_test_df = lr_model.transform(res_test_df).cache()
+
+res_test_df = (res_test_df.drop('lr_prob')
+                    .join(lr_test_df.rdd
+                    .map(lambda row: (row['id'], float(row['probability'][1])))
+                    .toDF(['id', 'lr_prob']), 'id')
+                    .cache())
+
+print(res_test_df.count())
+print(time() - t0)
+```
+
+    22544
+    32.770461082458496
+
+
+
+```python
+printReport(res_test_df, 'lr_prob', e=0.01, labels=labels2)
+```
+
+          	normal	attack	
+    normal	  8166	  1545	
+    attack	   112	 12721	
+     
+    Accuracy = 0.926499
+    AUC = 0.916087
+     
+    False Alarm Rate = 0.159098
+    Detection Rate = 0.991273
+    F1 score = 0.938854
+     
+                 precision    recall  f1-score   support
+    
+            0.0       0.99      0.84      0.91      9711
+            1.0       0.89      0.99      0.94     12833
+    
+    avg / total       0.93      0.93      0.93     22544
+    
+     
+
+
+
+```python
+t0 = time()
+rf_assembler = VectorAssembler(inputCols=[
+                            kmeans_pred_col, 
+                            gm_pred_col, 
+                            dos_pred_col, 
+                            probe_pred_col, 
+                            r2l_u2r_pred_col
+                            ],
+                            outputCol='features')
+
+rf_indexer =  VectorIndexer(inputCol='features', outputCol='indexed_features', maxCategories=2)
+
+rf = RandomForestClassifier(labelCol='labels2_index', featuresCol='features', seed=seed,
+                            numTrees=250, maxDepth=5, featureSubsetStrategy='auto')
+rf_pipeline = Pipeline(stages=[rf_assembler, 
+                               rf_indexer,
+                               rf])
+rf_model = rf_pipeline.fit(res_cv_df)
+rf_test_df = rf_model.transform(res_test_df).cache()
+
+res_test_df = (res_test_df.drop('rf_prob')
+                    .join(rf_test_df.rdd
+                    .map(lambda row: (row['id'], float(row['probability'][1])))
+                    .toDF(['id', 'rf_prob']), 'id')
+                    .cache())
+
+print(res_test_df.count())
+print(time() - t0)
+```
+
+    22544
+    28.341699600219727
+
+
+
+```python
+printReport(res_test_df, 'rf_prob', e=0.01, labels=labels2)
+```
+
+          	normal	attack	
+    normal	  8146	  1565	
+    attack	    88	 12745	
+     
+    Accuracy = 0.926677
+    AUC = 0.915993
+     
+    False Alarm Rate = 0.161157
+    Detection Rate = 0.993143
+    F1 score = 0.9391
+     
+                 precision    recall  f1-score   support
+    
+            0.0       0.99      0.84      0.91      9711
+            1.0       0.89      0.99      0.94     12833
+    
+    avg / total       0.93      0.93      0.93     22544
+    
+     
+
+
+
+```python
+# Adding prediction columns based on chosen thresholds into result dataframes
+t0 = time()
+res_test_df = res_test_df.withColumn('lr_pred', getPrediction(0.01)(col('lr_prob'))).cache()
+res_test_df = res_test_df.withColumn('rf_pred', getPrediction(0.01)(col('rf_prob'))).cache()
+
+print(res_test_df.count())
+print(time() - t0)
+```
+
+    22544
+    4.118284225463867
+
+
+
+```python
+printReport(res_test_df
+            .select('labels2_index', ((col('lr_prob') + col('rf_prob'))/2)
+                    .alias('voting')), 
+                    'voting', e=0.01, labels=labels2)
+```
+
+          	normal	attack	
+    normal	  8146	  1565	
+    attack	    88	 12745	
+     
+    Accuracy = 0.926677
+    AUC = 0.915993
+     
+    False Alarm Rate = 0.161157
+    Detection Rate = 0.993143
+    F1 score = 0.9391
+     
+                 precision    recall  f1-score   support
+    
+            0.0       0.99      0.84      0.91      9711
+            1.0       0.89      0.99      0.94     12833
+    
+    avg / total       0.93      0.93      0.93     22544
+    
+     
+
+
+
+```python
+printReport(res_test_df
+            .select('labels2_index', (col('lr_pred').cast('int').bitwiseOR(col('rf_pred').cast('int')))
+                    .alias('voting')), 
+                    'voting', labels=labels2)
+```
+
+          	normal	attack	
+    normal	  8094	  1617	
+    attack	    47	 12786	
+     
+    Accuracy = 0.926189
+    AUC = 0.914913
+     
+    False Alarm Rate = 0.166512
+    Detection Rate = 0.996338
+    F1 score = 0.938904
      
                  precision    recall  f1-score   support
     
             0.0       0.99      0.83      0.91      9711
             1.0       0.89      1.00      0.94     12833
     
-    avg / total       0.93      0.93      0.92     22544
+    avg / total       0.93      0.93      0.93     22544
     
      
 
+
+### 11.3 Stacking with Random Forest Classifier
 
 
 ```python
@@ -3567,7 +3587,7 @@ print(stack_cv_df.count())
 print(stack_test_df.count())
 ```
 
-    25137
+    25133
     22544
 
 
@@ -3585,15 +3605,12 @@ pred_assembler = VectorAssembler(inputCols=[
 pred_indexer = VectorIndexer(inputCol='pred_features', outputCol='indexed_pred_features', maxCategories=2)
 
 rf_stack_slicer = VectorSlicer(inputCol='indexed_features', outputCol='selected_features', 
-                          names=selectFeaturesByAR(ar_dict, 1.5))
+                               names=selectFeaturesByAR(ar_dict, 1.5))
 
 rf_stack_assembler = VectorAssembler(inputCols=['selected_features', 'indexed_pred_features'], outputCol='rf_features')
 
-rf_stack_classifier = RandomForestClassifier(labelCol=labels_col, 
-                                       featuresCol='rf_features', 
-                                       numTrees=500, 
-                                       maxDepth=20,
-                                       featureSubsetStrategy="sqrt")
+rf_stack_classifier = RandomForestClassifier(labelCol=labels_col, featuresCol='rf_features', seed=seed,
+                                             numTrees=500, maxDepth=20, featureSubsetStrategy="auto")
 
 stack_pipeline = Pipeline(stages=[pred_assembler, 
                                   pred_indexer, 
@@ -3611,9 +3628,9 @@ print(pred_stack_test_df.count())
 print(time() - t0)
 ```
 
-    25137
+    25133
     22544
-    62.70647835731506
+    68.9830629825592
 
 
 
@@ -3630,8 +3647,8 @@ print(res_cv_df.count())
 print(time() - t0)
 ```
 
-    25137
-    8.00352954864502
+    25133
+    7.56744384765625
 
 
 
@@ -3649,7 +3666,7 @@ print(time() - t0)
 ```
 
     22544
-    7.304095983505249
+    7.081209421157837
 
 
 
@@ -3658,24 +3675,32 @@ printReport(res_test_df, 'prob_stack_rf', e=0.01, labels=labels2)
 ```
 
           	normal	attack	
-    normal	  8098	  1613	
-    attack	    54	 12779	
+    normal	  8140	  1571	
+    attack	    88	 12745	
      
-    Accuracy = 0.926056
-    AUC = 0.914846
+    Accuracy = 0.926411
+    AUC = 0.915684
      
-    False Alarm Rate = 0.1661
-    Detection Rate = 0.995792
-    F1 score = 0.93877
+    False Alarm Rate = 0.161775
+    Detection Rate = 0.993143
+    F1 score = 0.938893
      
                  precision    recall  f1-score   support
     
-            0.0       0.99      0.83      0.91      9711
-            1.0       0.89      1.00      0.94     12833
+            0.0       0.99      0.84      0.91      9711
+            1.0       0.89      0.99      0.94     12833
     
-    avg / total       0.93      0.93      0.92     22544
+    avg / total       0.93      0.93      0.93     22544
     
      
+
+
+
+```python
+print(time() - gt0)
+```
+
+    1407.712391614914
 
 
 ## 12. Results summary
@@ -3683,9 +3708,4 @@ printReport(res_test_df, 'prob_stack_rf', e=0.01, labels=labels2)
 The best result from a single approach was achieved by KMeans Clustering with Random Forest Classifiers. It gives 
 around ~98-99% of detection rate with reasonable ~14-15% of false alarm rate. F1 score is 0.94, weighted F1 score is 0.93.
 
-For improving detection rate ensembling approaches are used. The best of them gives ~99.5-99.6% of detection rate with ~16.1-16.6% of false alarm rate. So there are only about 50-70 attack connections from 12833 (including unknown before) which haven't been recognized.
-
-
-```python
-print(time() - gt0)
-```
+For improving detection rate ensembling approaches are used. The best of them gives ~99.5-99.6% of detection rate with ~16.1-16.6% of false alarm rate. So there are only about 40-90 attack connections from 12833 (including unknown before) which haven't been recognized.
