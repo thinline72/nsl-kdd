@@ -9,18 +9,18 @@ Note: I've had to build my own all-spark docker image for trying Apache Spark 2.
 
 ## Contents
 
-1. [Task description summary](#1.-Task-description-summary)
-2. [Data loading](#2.-Data-loading)
-3. [Exploratory Data Analysis](#3.-Exploratory-Data-Analysis)
-4. [One Hot Encoding for categorical variables](#4.-One-Hot-Encoding-for-categorical-variables)
-5. [Feature Selection using Attribute Ratio](#5.-Feature-Selection-using-Attribute-Ratio)
-6. [Data preparation](#6.-Data-preparation)
-7. [Visualization via PCA](#7.-Visualization-via-PCA)
-8. [KMeans clustering with Random Forest Classifiers](#8.-KMeans-clustering-with-Random-Forest-Classifiers)
-9. [Gaussian Mixture clustering with Random Forest Classifiers](#9.-Gaussian-Mixture-clustering-with-Random-Forest-Classifiers)
-10. [Supervised approach for dettecting each type of attacks separately](#10.-Supervised-approach-for-dettecting-each-type-of-attacks-separately)
-11. [Ensembling experiments](#11.-Ensembling-experiments)
-12. [Results summary](#12.-Results-summary)
+1. [Task description summary](#1-task-description-summary)
+2. [Data loading](#2-data-loading)
+3. [Exploratory Data Analysis](#3-exploratory-Data-Analysis)
+4. [One Hot Encoding for categorical variables](#4-one-Hot-Encoding-for-categorical-variables)
+5. [Feature Selection using Attribute Ratio](#5-feature-Selection-using-Attribute-Ratio)
+6. [Data preparation](#6-data-preparation)
+7. [Visualization via PCA](#7-visualization-via-PCA)
+8. [KMeans clustering with Random Forest Classifiers](#8-kMeans-clustering-with-Random-Forest-Classifiers)
+9. [Gaussian Mixture clustering with Random Forest Classifiers](#9-gaussian-Mixture-clustering-with-Random-Forest-Classifiers)
+10. [Supervised approach for dettecting each type of attacks separately](#10-supervised-approach-for-dettecting-each-type-of-attacks-separately)
+11. [Ensembling experiments](#11-ensembling-experiments)
+12. [Results summary](#12-results-summary)
 
 ## 1. Task description summary
 
