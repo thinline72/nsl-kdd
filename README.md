@@ -5,7 +5,7 @@ This is my try with [NSL-KDD](http://www.unb.ca/research/iscx/dataset/iscx-NSL-K
 
 I've tried a variety of approaches to deal with this dataset. Here are presented some of them.
 
-Note: I've had to build my own all-spark docker image for trying Apache Spark 2.0 at that moment.
+To be able to run this notebook, use `make nsl-kdd-pyspark` command. It'll download the latest jupyter/pyspark-notebook docker image and start a container with Jupyter available at `8889` port.
 
 ## Contents
 
